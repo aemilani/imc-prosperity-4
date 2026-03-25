@@ -1,82 +1,319 @@
+import jsonpickle
 import numpy as np
+from dataclasses import dataclass
 from datamodel import OrderDepth, TradingState, Order
-from typing import List
+from typing import List, Dict
 
 
-def trade(product: str, state: TradingState) -> List[Order] | None:
-    if product == 'RAINFOREST_RESIN':
-        return trade_resin(state)
-    elif product == 'KELP':
-        return trade_kelp(state)
+@dataclass
+class Product:
+    name: str
+    limit: int
+    fair_value: float = None
+    position: int = 0
+    posted_buy_volume: int = 0
+    posted_sell_volume: int = 0
+    best_bid: float = None
+    best_ask: float = None
+    best_bid_size: int = None
+    best_ask_size: int = None
 
 
-def trade_resin(state: TradingState) -> List[Order]:
-    curr_position = state.position.get('RAINFOREST_RESIN', 0)
-    print(f'RAINFOREST_RESIN position: {curr_position}')
-
-    max_position = 50
-    max_buy_size = min(max_position, max_position - curr_position)
-    max_sell_size = max(-max_position, -max_position - curr_position)
-
-    fair_value = 10000
-    print(f'RAINFOREST_RESIN fair value: {fair_value}')
-
-    thr_l = fair_value - 2
-    thr_h = fair_value + 2
-    buy_price = thr_l
-    sell_price = thr_h
-
-    resin_orders = []
-    if max_buy_size > 0:
-        print(f'BUY: {max_buy_size} @ {buy_price}')
-        resin_orders.append(Order('RAINFOREST_RESIN', buy_price, max_buy_size))
-    if max_sell_size < 0:
-        print(f'SELL: {max_sell_size} @ {sell_price}')
-        resin_orders.append(Order('RAINFOREST_RESIN', sell_price, max_sell_size))
-
-    return resin_orders
+@dataclass
+class Emeralds(Product):
+    name: str = 'EMERALDS'
+    limit: int = 50
+    fair_value: float = 10000
+    take_thr: int = 1
+    clear_thr: int = 0
+    disregard_thr: int = 1
+    join_thr: int = 2
+    default_thr: int = 4
+    soft_pos_limit: int = 40
 
 
-def trade_kelp(state: TradingState) -> List[Order]:
-    curr_position = state.position.get('KELP', 0)
-    print(f'KELP position: {curr_position}')
+@dataclass
+class Tomatoes(Product):
+    name: str = 'TOMATOES'
+    limit: int = 50
+    take_thr: int = 1
+    clear_thr: int = 0
+    disregard_thr: int = 1
+    join_thr: int = 0
+    default_thr: int = 1
+    volume_thr: int = 15
 
-    order_depth: OrderDepth = state.order_depths['KELP']
 
-    max_position = 50
-    max_buy_size = min(max_position, max_position - curr_position)
-    max_sell_size = max(-max_position, -max_position - curr_position)
+def calc_tomatoes_fair_value(state: TradingState) -> float:
+    previous_price = None
+    if state.traderData:
+        previous_state = jsonpickle.decode(state.traderData)
+        previous_price = previous_state.get('tomatoes_last_price', None)
 
-    buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
-    sell_orders = sorted(order_depth.sell_orders.items())
+    order_depth: OrderDepth = state.order_depths['TOMATOES']
 
-    popular_buy_price = max(buy_orders, key=lambda tup: tup[1])[0]
-    popular_sell_price = min(sell_orders, key=lambda tup: tup[1])[0]
+    if len(order_depth.sell_orders) != 0 and len(order_depth.buy_orders) != 0:
+        best_ask = min(order_depth.sell_orders.keys())
+        best_bid = max(order_depth.buy_orders.keys())
 
-    fair_value = round((popular_buy_price + popular_sell_price) / 2)
-    print(f'KELP fair value: {fair_value}')
+        filtered_asks = [price for price in order_depth.sell_orders.keys() if abs(order_depth.sell_orders[price]) >= 15]
+        filtered_bids = [price for price in order_depth.buy_orders.keys() if abs(order_depth.buy_orders[price]) >= 15]
+        best_filtered_ask = min(filtered_asks) if len(filtered_asks) > 0 else None
+        best_filtered_bid = max(filtered_bids) if len(filtered_bids) > 0 else None
 
-    kelp_orders = []
-    if max_buy_size > 0:
-        buy_price = int(np.floor(fair_value)) - 1
-        print(f'BUY: {max_buy_size} @ {buy_price}')
-        kelp_orders.append(Order('KELP', buy_price, max_buy_size))
-    if max_sell_size < 0:
-        sell_price = int(np.ceil(fair_value)) + 1
-        print(f'SELL: {max_sell_size} @ {sell_price}')
-        kelp_orders.append(Order('KELP', sell_price, max_sell_size))
+        if best_filtered_ask and best_filtered_bid:
+            fair_value = (best_filtered_ask + best_filtered_bid) / 2
+        else:
+            fair_value = (best_ask + best_bid) / 2
 
-    return kelp_orders
+        if not previous_price:
+            return fair_value
+        else:
+            curr_logr = np.log(fair_value / previous_price)
+            next_logr = curr_logr * -0.27  # mean-reversion param
+            return fair_value * np.exp(next_logr)
+    else:
+        return previous_price
+
+
+def trade_emeralds(state: TradingState, resin: Emeralds) -> List[Order]:
+    order_depth: OrderDepth = state.order_depths['EMERALDS']
+    orders: List[Order] = []
+
+    # Market taking
+    if len(order_depth.sell_orders) != 0:
+        best_ask = min(order_depth.sell_orders.keys())
+        best_ask_amount = -1 * order_depth.sell_orders[best_ask]
+
+        if best_ask <= resin.fair_value - resin.take_thr:
+            quantity = min(
+                best_ask_amount, resin.limit - resin.position
+            )  # max amt to buy
+            if quantity > 0:
+                orders.append(Order(resin.name, best_ask, quantity))
+                resin.posted_buy_volume += quantity
+                order_depth.sell_orders[best_ask] += quantity
+                if order_depth.sell_orders[best_ask] == 0:
+                    del order_depth.sell_orders[best_ask]
+    if len(order_depth.buy_orders) != 0:
+        best_bid = max(order_depth.buy_orders.keys())
+        best_bid_amount = order_depth.buy_orders[best_bid]
+
+        if best_bid >= resin.fair_value + resin.take_thr:
+            quantity = min(
+                best_bid_amount, resin.limit + resin.position
+            )  # should be the max we can sell
+            if quantity > 0:
+                orders.append(Order(resin.name, best_bid, -1 * quantity))
+                resin.posted_sell_volume += quantity
+                order_depth.buy_orders[best_bid] -= quantity
+                if order_depth.buy_orders[best_bid] == 0:
+                    del order_depth.buy_orders[best_bid]
+
+    # Position clearance
+    position_after_take = resin.position + resin.posted_buy_volume - resin.posted_sell_volume
+    fair_for_bid = round(resin.fair_value - resin.clear_thr)
+    fair_for_ask = round(resin.fair_value + resin.clear_thr)
+    buy_quantity = resin.limit - (resin.position + resin.posted_buy_volume)
+    sell_quantity = resin.limit + (resin.position - resin.posted_sell_volume)
+
+    if position_after_take > 0:
+        # Aggregate volume from all buy orders with price greater than fair_for_ask
+        clear_quantity = sum(
+            volume
+            for price, volume in order_depth.buy_orders.items()
+            if price >= fair_for_ask
+        )
+        clear_quantity = min(clear_quantity, position_after_take)
+        sent_quantity = min(sell_quantity, clear_quantity)
+        if sent_quantity > 0:
+            orders.append(Order(resin.name, fair_for_ask, -abs(sent_quantity)))
+            resin.posted_sell_volume += abs(sent_quantity)
+
+    if position_after_take < 0:
+        # Aggregate volume from all sell orders with price lower than fair_for_bid
+        clear_quantity = sum(
+            abs(volume)
+            for price, volume in order_depth.sell_orders.items()
+            if price <= fair_for_bid
+        )
+        clear_quantity = min(clear_quantity, abs(position_after_take))
+        sent_quantity = min(buy_quantity, clear_quantity)
+        if sent_quantity > 0:
+            orders.append(Order(resin.name, fair_for_bid, abs(sent_quantity)))
+            resin.posted_buy_volume += abs(sent_quantity)
+
+    # Market making
+    asks_above_fair = [
+        price
+        for price in order_depth.sell_orders.keys()
+        if price > resin.fair_value + resin.disregard_thr
+    ]
+    bids_below_fair = [
+        price
+        for price in order_depth.buy_orders.keys()
+        if price < resin.fair_value - resin.disregard_thr
+    ]
+    best_ask_above_fair = min(asks_above_fair) if len(asks_above_fair) > 0 else None
+    best_bid_below_fair = max(bids_below_fair) if len(bids_below_fair) > 0 else None
+
+    ask = round(resin.fair_value + resin.default_thr)
+    if best_ask_above_fair is not None:
+        if abs(best_ask_above_fair - resin.fair_value) <= resin.join_thr:
+            ask = best_ask_above_fair  # join
+        else:
+            ask = best_ask_above_fair - 1  # penny
+
+    bid = round(resin.fair_value - resin.default_thr)
+    if best_bid_below_fair is not None:
+        if abs(resin.fair_value - best_bid_below_fair) <= resin.join_thr:
+            bid = best_bid_below_fair
+        else:
+            bid = best_bid_below_fair + 1
+
+    if resin.position > resin.soft_pos_limit:
+        ask -= 1
+    elif resin.position < -1 * resin.soft_pos_limit:
+        bid += 1
+
+    buy_quantity = resin.limit - (resin.position + resin.posted_buy_volume)
+    if buy_quantity > 0:
+        orders.append(Order(resin.name, round(bid), buy_quantity))  # Buy order
+
+    sell_quantity = resin.limit + (resin.position - resin.posted_sell_volume)
+    if sell_quantity > 0:
+        orders.append(Order(resin.name, round(ask), -sell_quantity))  # Sell order
+
+    return orders
+
+
+def trade_tomatoes(state: TradingState, tomatoes:Tomatoes) -> List[Order]:
+    order_depth: OrderDepth = state.order_depths['TOMATOES']
+    orders: List[Order] = []
+
+    # Market taking
+    if len(order_depth.sell_orders) != 0:
+        best_ask = min(order_depth.sell_orders.keys())
+        best_ask_amount = -1 * order_depth.sell_orders[best_ask]
+
+        if abs(best_ask_amount) <= tomatoes.volume_thr:
+            if best_ask <= tomatoes.fair_value - tomatoes.take_thr:
+                quantity = min(
+                    best_ask_amount, tomatoes.limit - tomatoes.position
+                )  # max amt to buy
+                if quantity > 0:
+                    orders.append(Order(tomatoes.name, best_ask, quantity))
+                    tomatoes.posted_buy_volume += quantity
+                    order_depth.sell_orders[best_ask] += quantity
+                    if order_depth.sell_orders[best_ask] == 0:
+                        del order_depth.sell_orders[best_ask]
+    if len(order_depth.buy_orders) != 0:
+        best_bid = max(order_depth.buy_orders.keys())
+        best_bid_amount = order_depth.buy_orders[best_bid]
+
+        if abs(best_bid_amount) <= tomatoes.volume_thr:
+            if best_bid >= tomatoes.fair_value + tomatoes.take_thr:
+                quantity = min(
+                    best_bid_amount, tomatoes.limit + tomatoes.position
+                )  # should be the max we can sell
+                if quantity > 0:
+                    orders.append(Order(tomatoes.name, best_bid, -1 * quantity))
+                    tomatoes.posted_sell_volume += quantity
+                    order_depth.buy_orders[best_bid] -= quantity
+                    if order_depth.buy_orders[best_bid] == 0:
+                        del order_depth.buy_orders[best_bid]
+
+    # Position clearance
+    position_after_take = tomatoes.position + tomatoes.posted_buy_volume - tomatoes.posted_sell_volume
+    fair_for_bid = round(tomatoes.fair_value - tomatoes.clear_thr)
+    fair_for_ask = round(tomatoes.fair_value + tomatoes.clear_thr)
+    buy_quantity = tomatoes.limit - (tomatoes.position + tomatoes.posted_buy_volume)
+    sell_quantity = tomatoes.limit + (tomatoes.position - tomatoes.posted_sell_volume)
+
+    if position_after_take > 0:
+        # Aggregate volume from all buy orders with price greater than fair_for_ask
+        clear_quantity = sum(
+            volume
+            for price, volume in order_depth.buy_orders.items()
+            if price >= fair_for_ask
+        )
+        clear_quantity = min(clear_quantity, position_after_take)
+        sent_quantity = min(sell_quantity, clear_quantity)
+        if sent_quantity > 0:
+            orders.append(Order(tomatoes.name, fair_for_ask, -abs(sent_quantity)))
+            tomatoes.posted_sell_volume += abs(sent_quantity)
+
+    if position_after_take < 0:
+        # Aggregate volume from all sell orders with price lower than fair_for_bid
+        clear_quantity = sum(
+            abs(volume)
+            for price, volume in order_depth.sell_orders.items()
+            if price <= fair_for_bid
+        )
+        clear_quantity = min(clear_quantity, abs(position_after_take))
+        sent_quantity = min(buy_quantity, clear_quantity)
+        if sent_quantity > 0:
+            orders.append(Order(tomatoes.name, fair_for_bid, abs(sent_quantity)))
+            tomatoes.posted_buy_volume += abs(sent_quantity)
+
+    # Market making
+    asks_above_fair = [
+        price
+        for price in order_depth.sell_orders.keys()
+        if price > tomatoes.fair_value + tomatoes.disregard_thr
+    ]
+    bids_below_fair = [
+        price
+        for price in order_depth.buy_orders.keys()
+        if price < tomatoes.fair_value - tomatoes.disregard_thr
+    ]
+    best_ask_above_fair = min(asks_above_fair) if len(asks_above_fair) > 0 else None
+    best_bid_below_fair = max(bids_below_fair) if len(bids_below_fair) > 0 else None
+
+    ask = round(tomatoes.fair_value + tomatoes.default_thr)
+    if best_ask_above_fair is not None:
+        if abs(best_ask_above_fair - tomatoes.fair_value) <= tomatoes.join_thr:
+            ask = best_ask_above_fair  # join
+        else:
+            ask = best_ask_above_fair - 1  # penny
+
+    bid = round(tomatoes.fair_value - tomatoes.default_thr)
+    if best_bid_below_fair is not None:
+        if abs(tomatoes.fair_value - best_bid_below_fair) <= tomatoes.join_thr:
+            bid = best_bid_below_fair
+        else:
+            bid = best_bid_below_fair + 1
+
+    buy_quantity = tomatoes.limit - (tomatoes.position + tomatoes.posted_buy_volume)
+    if buy_quantity > 0:
+        orders.append(Order(tomatoes.name, round(bid), buy_quantity))  # Buy order
+
+    sell_quantity = tomatoes.limit + (tomatoes.position - tomatoes.posted_sell_volume)
+    if sell_quantity > 0:
+        orders.append(Order(tomatoes.name, round(ask), -sell_quantity))  # Sell order
+
+    return orders
 
 
 class Trader:
     def run(self, state: TradingState):
-        result = {}
-        for product in state.order_depths:
-            orders: List[Order] = trade(product, state)
-            result[product] = orders
-            print('---')
+        conversions = 0
+        tomatoes_fair_value = None
 
-        trader_data = None
-        conversions = 1
+        result = {}
+        for product_name in state.order_depths:
+            position = state.position.get(product_name, 0)
+            print(f'{product_name} position: {position}')
+            orders: List[Order] = []
+            if product_name == 'EMERALDS':
+                product = Emeralds(position=position)
+                orders.extend(trade_emeralds(state, product))
+            if product_name == 'TOMATOES':
+                tomatoes_fair_value = calc_tomatoes_fair_value(state)
+                product = Tomatoes(position=position, fair_value=tomatoes_fair_value)
+                orders.extend(trade_tomatoes(state, product))
+
+        trader_data = jsonpickle.encode({
+            'tomatoes_last_price': tomatoes_fair_value,
+        })
         return result, conversions, trader_data
