@@ -2,7 +2,7 @@ import jsonpickle
 import numpy as np
 from dataclasses import dataclass
 from datamodel import OrderDepth, TradingState, Order
-from typing import List, Dict
+from typing import List
 
 
 @dataclass
