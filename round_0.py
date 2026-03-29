@@ -28,7 +28,7 @@ class Emeralds(Product):
     clear_thr: int = 0
     disregard_thr: int = 2
     join_thr: int = 4
-    default_thr: int = 8
+    default_thr: int = 7
     soft_pos_limit: int = 60
 
 
@@ -39,8 +39,8 @@ class Tomatoes(Product):
     take_thr: int = 1
     clear_thr: int = 0
     disregard_thr: int = 1
-    join_thr: int = 0
-    default_thr: int = 1
+    join_thr: int = 3
+    default_thr: int = 6
     volume_thr: int = 15
 
 
