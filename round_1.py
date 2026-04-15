@@ -1,4 +1,5 @@
 import jsonpickle
+import math
 import numpy as np
 from dataclasses import dataclass
 from datamodel import OrderDepth, TradingState, Order
@@ -28,7 +29,8 @@ class Pepper(Product):
     disregard_thr: int = 2
     join_thr: int = 3
     default_thr: int = 5
-    soft_pos_limit: int = 60
+    soft_pos_limit: int = 70
+    target_position: int = 40
 
 
 @dataclass
@@ -74,7 +76,7 @@ def calc_pepper_fair_value(state: TradingState) -> float:
         else:
             curr_logr = np.log(fair_value / previous_price)
             next_logr = curr_logr * -0.47  # mean-reversion param
-            return fair_value * np.exp(next_logr)
+            return fair_value * np.exp(next_logr) + 0.1  # trend component
     else:
         return previous_price
 
@@ -211,8 +213,11 @@ def trade_pepper(state: TradingState, pepper: Pepper) -> List[Order]:
 
     if pepper.position > pepper.soft_pos_limit:
         ask -= 1
-    elif pepper.position < -1 * pepper.soft_pos_limit:
-        bid += 1
+    elif pepper.position < pepper.target_position:
+        bid += math.ceil(
+            (pepper.fair_value - bid) * (pepper.target_position - pepper.position) / (
+                        pepper.target_position + pepper.limit)
+        )
 
     buy_quantity = pepper.limit - (pepper.position + pepper.posted_buy_volume)
     if buy_quantity > 0:
