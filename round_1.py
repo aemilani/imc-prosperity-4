@@ -115,6 +115,9 @@ def trade_pepper(state: TradingState, pepper: Pepper) -> List[Order]:
     order_depth: OrderDepth = state.order_depths['INTARIAN_PEPPER_ROOT']
     orders: List[Order] = []
 
+    if not pepper.fair_value:
+        return orders
+
     # Market taking
     if len(order_depth.sell_orders) != 0:
         best_ask = min(order_depth.sell_orders.keys())
@@ -225,6 +228,9 @@ def trade_pepper(state: TradingState, pepper: Pepper) -> List[Order]:
 def trade_osmium(state: TradingState, osmium:Osmium) -> List[Order]:
     order_depth: OrderDepth = state.order_depths['ASH_COATED_OSMIUM']
     orders: List[Order] = []
+
+    if not osmium.fair_value:
+        return orders
 
     # Market taking
     if len(order_depth.sell_orders) != 0:
