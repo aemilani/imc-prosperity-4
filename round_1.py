@@ -24,13 +24,13 @@ class Product:
 class Pepper(Product):
     name: str = 'INTARIAN_PEPPER_ROOT'
     limit: int = 80
-    take_thr: int = 1
+    take_thr: int = 0
     clear_thr: int = 0
     disregard_thr: int = 2
     join_thr: int = 3
     default_thr: int = 5
-    soft_pos_limit: int = 70
-    target_position: int = 40
+    soft_pos_limit: int = 80
+    target_position: int = 60
 
 
 @dataclass
@@ -43,10 +43,6 @@ class Osmium(Product):
     join_thr: int = 3
     default_thr: int = 7
     volume_thr: int = 20
-
-
-# def calc_pepper_fair_value(state: TradingState, day=0) -> float:
-#     return 10000 + (state.timestamp + (day + 2) * 1e6) / 1000
 
 
 def calc_pepper_fair_value(state: TradingState) -> float:
@@ -125,7 +121,7 @@ def trade_pepper(state: TradingState, pepper: Pepper) -> List[Order]:
         best_ask = min(order_depth.sell_orders.keys())
         best_ask_amount = -1 * order_depth.sell_orders[best_ask]
 
-        if best_ask <= pepper.fair_value - pepper.take_thr:
+        if best_ask <= pepper.fair_value - pepper.take_thr or pepper.position < pepper.target_position:
             quantity = min(
                 best_ask_amount, pepper.limit - pepper.position
             )  # max amt to buy
@@ -214,10 +210,12 @@ def trade_pepper(state: TradingState, pepper: Pepper) -> List[Order]:
     if pepper.position > pepper.soft_pos_limit:
         ask -= 1
     elif pepper.position < pepper.target_position:
-        bid += math.ceil(
+        skew = math.ceil(
             (pepper.fair_value - bid) * (pepper.target_position - pepper.position) / (
                         pepper.target_position + pepper.limit)
         )
+        bid += skew
+        ask += skew
 
     buy_quantity = pepper.limit - (pepper.position + pepper.posted_buy_volume)
     if buy_quantity > 0:
