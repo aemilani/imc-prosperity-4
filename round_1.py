@@ -43,6 +43,8 @@ class Osmium(Product):
     join_thr: int = 3
     default_thr: int = 7
     volume_thr: int = 20
+    price_mean: float = 10000
+    price_std: float = 4.75
 
 
 def calc_pepper_fair_value(state: TradingState) -> float:
@@ -241,7 +243,13 @@ def trade_osmium(state: TradingState, osmium:Osmium) -> List[Order]:
         best_ask_amount = -1 * order_depth.sell_orders[best_ask]
 
         if abs(best_ask_amount) <= osmium.volume_thr:
-            if best_ask <= osmium.fair_value - osmium.take_thr:
+            standard_take = best_ask <= osmium.fair_value - osmium.take_thr
+
+            edge_to_mean = osmium.price_mean - best_ask  # Profit expected when reverting up to mean
+            half_spread = best_ask - osmium.fair_value  # Cost paid to cross the spread
+            snap_back_take = edge_to_mean > (half_spread + osmium.take_thr)
+
+            if standard_take or snap_back_take:
                 quantity = min(
                     best_ask_amount, osmium.limit - osmium.position
                 )  # max amt to buy
@@ -251,12 +259,19 @@ def trade_osmium(state: TradingState, osmium:Osmium) -> List[Order]:
                     order_depth.sell_orders[best_ask] += quantity
                     if order_depth.sell_orders[best_ask] == 0:
                         del order_depth.sell_orders[best_ask]
+
     if len(order_depth.buy_orders) != 0:
         best_bid = max(order_depth.buy_orders.keys())
         best_bid_amount = order_depth.buy_orders[best_bid]
 
         if abs(best_bid_amount) <= osmium.volume_thr:
-            if best_bid >= osmium.fair_value + osmium.take_thr:
+            standard_take = best_bid >= osmium.fair_value + osmium.take_thr
+
+            edge_to_mean = best_bid - osmium.price_mean  # Profit expected when crashing down to mean
+            half_spread = osmium.fair_value - best_bid  # Cost paid to cross the spread
+            snap_back_take = edge_to_mean > (half_spread + osmium.take_thr)
+
+            if standard_take or snap_back_take:
                 quantity = min(
                     best_bid_amount, osmium.limit + osmium.position
                 )  # should be the max we can sell
@@ -352,12 +367,12 @@ class Trader:
             orders: List[Order] = []
             if product_name == 'INTARIAN_PEPPER_ROOT':
                 pepper_fair_value = calc_pepper_fair_value(state)
-                product = Pepper(position=position, fair_value=pepper_fair_value)
-                orders.extend(trade_pepper(state, product))
+                pepper = Pepper(position=position, fair_value=pepper_fair_value)
+                orders.extend(trade_pepper(state, pepper))
             if product_name == 'ASH_COATED_OSMIUM':
                 osmium_fair_value = calc_osmium_fair_value(state)
-                product = Osmium(position=position, fair_value=osmium_fair_value)
-                orders.extend(trade_osmium(state, product))
+                osmium = Osmium(position=position, fair_value=osmium_fair_value)
+                orders.extend(trade_osmium(state, osmium))
 
             result[product_name] = orders
             print('---')
