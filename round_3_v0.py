@@ -32,7 +32,6 @@ class Hydrogel(Product):
     join_thr: int = 3
     default_thr: int = 8
     volume_thr: int = 20
-    soft_pos_limit: int = 180
     price_mean: float = 9990
     price_std: float = 32
     z_score_take_thr: float = 1.5
@@ -193,13 +192,6 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
             bid = best_bid_below_fair
         else:
             bid = best_bid_below_fair + 1
-
-    if hydrogel.position > hydrogel.soft_pos_limit:
-        bid -= 1
-        ask -= 1
-    elif hydrogel.position < -hydrogel.soft_pos_limit:
-        bid += 1
-        ask += 1
 
     buy_quantity = hydrogel.limit - (hydrogel.position + hydrogel.posted_buy_volume)
     if buy_quantity > 0:
