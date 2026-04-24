@@ -35,7 +35,7 @@ class Hydrogel(Product):
     soft_pos_limit: int = 180
     price_mean: float = 9990
     price_std: float = 32
-    z_score_take_thr: float = 1
+    z_score_take_thr: float = 1.5
     z_score_clear_thr: float = 0
 
 

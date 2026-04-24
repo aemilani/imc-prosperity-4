@@ -88,15 +88,22 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
         if abs(best_ask_amount) <= hydrogel.volume_thr:
             standard_take = best_ask <= hydrogel.fair_value - hydrogel.take_thr
 
-            edge_to_mean = hydrogel.price_mean - best_ask
-            half_spread = best_ask - hydrogel.fair_value
+            dynamic_premium = 0
+            if z_score < -hydrogel.z_score_take_thr:
+                excess_z = abs(z_score) - hydrogel.z_score_take_thr
+                dynamic_premium = int(excess_z * 8)
+
             mean_reversion_trade = (z_score < -hydrogel.z_score_take_thr) and (
-                        edge_to_mean > half_spread + hydrogel.take_thr)
+                    best_ask <= hydrogel.fair_value + dynamic_premium
+            )
 
-            mean_reversion_clear = z_score < hydrogel.z_score_clear_thr and hydrogel.position < 0
-            mean_reversion_take = mean_reversion_trade or mean_reversion_clear
+            mean_reversion_clear = (
+                    z_score < hydrogel.z_score_clear_thr
+                    and hydrogel.position < 0
+                    and best_ask <= hydrogel.fair_value + 1
+            )
 
-            if standard_take or mean_reversion_take:
+            if standard_take or mean_reversion_trade or mean_reversion_clear:
                 quantity = min(
                     best_ask_amount, hydrogel.limit - hydrogel.position
                 )  # max amt to buy
@@ -114,15 +121,22 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
         if abs(best_bid_amount) <= hydrogel.volume_thr:
             standard_take = best_bid >= hydrogel.fair_value + hydrogel.take_thr
 
-            edge_to_mean = best_bid - hydrogel.price_mean
-            half_spread = hydrogel.fair_value - best_bid
+            dynamic_premium = 0
+            if z_score > hydrogel.z_score_take_thr:
+                excess_z = abs(z_score) - hydrogel.z_score_take_thr
+                dynamic_premium = int(excess_z * 8)
+
             mean_reversion_trade = (z_score > hydrogel.z_score_take_thr) and (
-                        edge_to_mean > half_spread + hydrogel.take_thr)
+                    best_bid >= hydrogel.fair_value - dynamic_premium
+            )
 
-            mean_reversion_clear = z_score > -hydrogel.z_score_clear_thr and hydrogel.position > 0
-            mean_reversion_take = mean_reversion_trade or mean_reversion_clear
+            mean_reversion_clear = (
+                    z_score > -hydrogel.z_score_clear_thr
+                    and hydrogel.position > 0
+                    and best_bid >= hydrogel.fair_value - 1
+            )
 
-            if standard_take or mean_reversion_take:
+            if standard_take or mean_reversion_trade or mean_reversion_clear:
                 quantity = min(
                     best_bid_amount, hydrogel.limit + hydrogel.position
                 )  # should be the max we can sell
