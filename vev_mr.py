@@ -21,51 +21,44 @@ class Product:
 
 
 @dataclass
-class Vev5000(Product):
-    name: str = 'VEV_5000'
-    limit: int = 300
-    price_mean: float = 253
-    price_std: float = 12
-    z_score_take_thr: float = 1.5
+class CallOption(Product):
+    strike_price: int = None
+    time_to_expiry: float = None
+    implied_vol: float = None
+    delta: float = None
+    vega: float = None
+    moneyness: float = None
+    price_mean: float = None
+    price_std: float = None
+    z_score_take_thr: float = None
+    vol_thr: float = None
+    mr_param: float = None
 
 
-@dataclass
-class Vev5100(Product):
-    name: str = 'VEV_5100'
-    limit: int = 300
-    price_mean: float = 168
-    price_std: float = 11
-    z_score_take_thr: float = 1.5
+CALL_CONFIGS = {
+    5000: dict(limit=300, price_mean=253, price_std=12, z_score_take_thr=1.5, vol_thr=15, mr_param=-0.05),
+    5100: dict(limit=300, price_mean=168, price_std=11, z_score_take_thr=1.5, vol_thr=15, mr_param=-0.08),
+    5200: dict(limit=300, price_mean=97,  price_std=8, z_score_take_thr=1.5, vol_thr=15, mr_param=-0.08),
+    5300: dict(limit=300, price_mean=49,  price_std=5, z_score_take_thr=1.5, vol_thr=15, mr_param=-0.14),
+}
 
 
-@dataclass
-class Vev5200(Product):
-    name: str = 'VEV_5200'
-    limit: int = 300
-    price_mean: float = 97
-    price_std: float = 8
-    z_score_take_thr: float = 1.5
+def make_call(strike: int) -> CallOption:
+    return CallOption(name=f"VEV_{strike}", strike_price=strike, **CALL_CONFIGS[strike])
 
 
-@dataclass
-class Vev5300(Product):
-    name: str = 'VEV_5300'
-    limit: int = 300
-    price_mean: float = 49
-    price_std: float = 5
-    z_score_take_thr: float = 1.5
-
-
-def calc_vev5000_fair_value(state: TradingState, previous_state: Dict) -> float:
-    previous_price: float | None = previous_state.get('vev5000_last_price')
-    order_depth: OrderDepth = state.order_depths['VEV_5000']
+def calc_vev_fair_value(state: TradingState, previous_state: Dict, vev: CallOption) -> float:
+    previous_price: float | None = previous_state.get(f'vev{vev.strike_price}_last_price')
+    order_depth: OrderDepth = state.order_depths[f'VEV_{vev.strike_price}']
 
     if len(order_depth.sell_orders) != 0 and len(order_depth.buy_orders) != 0:
         best_ask = min(order_depth.sell_orders.keys())
         best_bid = max(order_depth.buy_orders.keys())
 
-        filtered_asks = [price for price in order_depth.sell_orders.keys() if abs(order_depth.sell_orders[price]) >= 15]
-        filtered_bids = [price for price in order_depth.buy_orders.keys() if abs(order_depth.buy_orders[price]) >= 15]
+        filtered_asks = [price for price in order_depth.sell_orders.keys() if \
+                         abs(order_depth.sell_orders[price]) >= vev.vol_thr]
+        filtered_bids = [price for price in order_depth.buy_orders.keys() if \
+                         abs(order_depth.buy_orders[price]) >= vev.vol_thr]
         best_filtered_ask = min(filtered_asks) if len(filtered_asks) > 0 else None
         best_filtered_bid = max(filtered_bids) if len(filtered_bids) > 0 else None
 
@@ -78,13 +71,13 @@ def calc_vev5000_fair_value(state: TradingState, previous_state: Dict) -> float:
             return fair_value
         else:
             curr_logr = np.log(fair_value / previous_price)
-            next_logr = curr_logr * -0.05  # mean-reversion param
+            next_logr = curr_logr * vev.mr_param
             return fair_value * np.exp(next_logr)
     else:
         return previous_price
 
 
-def calc_vev5000_ema_stats(previous_state: Dict, vev:Vev5000) -> tuple[float, float]:
+def calc_vev_ema_stats(previous_state: Dict, vev:CallOption) -> tuple[float, float]:
     current_price = vev.fair_value
     ema_mean = vev.price_mean
     ema_std = vev.price_std
@@ -92,8 +85,8 @@ def calc_vev5000_ema_stats(previous_state: Dict, vev:Vev5000) -> tuple[float, fl
     if current_price is None:
         return ema_mean, ema_std
 
-    ema_mean = previous_state.get('vev5000_ema_mean', ema_mean)
-    ema_std = previous_state.get('vev5000_ema_std', ema_std)
+    ema_mean = previous_state.get(f'vev{vev.strike_price}_ema_mean', ema_mean)
+    ema_std = previous_state.get(f'vev{vev.strike_price}_ema_std', ema_std)
 
     window_size = 10000
     alpha = 2 / (window_size + 1)
@@ -110,8 +103,8 @@ def calc_vev5000_ema_stats(previous_state: Dict, vev:Vev5000) -> tuple[float, fl
     return ema_mean, current_std
 
 
-def trade_vev5000(state: TradingState, vev:Vev5000) -> List[Order]:
-    order_depth: OrderDepth = state.order_depths['VEV_5000']
+def trade_vev(state: TradingState, vev:CallOption) -> List[Order]:
+    order_depth: OrderDepth = state.order_depths[f'VEV_{vev.strike_price}']
     orders: List[Order] = []
 
     if not vev.fair_value:
@@ -161,23 +154,27 @@ class Trader:
                 pass
 
         result = {}
-        for product_name in state.order_depths:
-            position = state.position.get(product_name, 0)
-            print(f'{product_name} position: {position}')
+        if 'VELVETFRUIT_EXTRACT' in state.order_depths:
             orders: List[Order] = []
-            if product_name == 'VEV_5000':
-                vev5000_fair_value = calc_vev5000_fair_value(state, previous_state)
-                vev5000 = Vev5000(position=position, fair_value=vev5000_fair_value)
-                ema_mean, ema_std = calc_vev5000_ema_stats(previous_state, vev5000)
-                vev5000.price_mean = ema_mean
-                vev5000.price_std = ema_std
-                orders.extend(trade_vev5000(state, vev5000))
-                previous_state['vev5000_last_price'] = vev5000_fair_value
-                previous_state['vev5000_ema_mean'] = ema_mean
-                previous_state['vev5000_ema_std'] = ema_std
+            strikes = CALL_CONFIGS.keys()
+            calls = []
+            for strike in strikes:
+                calls.append(make_call(strike))
 
-            result[product_name] = orders
-            print('---')
+            for call in calls:
+                call.position = state.position.get(call.name, 0)
+                call_fair_value = calc_vev_fair_value(state, previous_state, call)
+                call.fair_value = call_fair_value
+                ema_mean, ema_std = calc_vev_ema_stats(previous_state, call)
+                call.price_mean = ema_mean
+                call.price_std = ema_std
+                orders.extend(trade_vev(state, call))
+                previous_state[f'vev{call.strike_price}_last_price'] = call_fair_value
+                previous_state[f'vev{call.strike_price}_ema_mean'] = ema_mean
+                previous_state[f'vev{call.strike_price}_ema_std'] = ema_std
+
+                result[call.name] = orders
+                print('---')
 
         trader_data = jsonpickle.encode(previous_state)
         return result, conversions, trader_data
