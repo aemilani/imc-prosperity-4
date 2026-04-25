@@ -38,13 +38,7 @@ class Velvetfruit:
             for strike in self.strike_prices]
         self.vol_window = 30
 
-        # Winning Strategy Tunables
-        self.mr_underlying_window = 10
-        self.mr_underlying_thr = 15
-
-        self.mr_options_window = 30
-        self.mr_options_thr = 5
-
+        # IV Scalping Tunables
         self.theo_norm_window = 20
         self.iv_scalping_window = 100
         self.iv_scalping_thr = 0.7  # MAD threshold to activate scalping
@@ -100,6 +94,7 @@ class BlackScholes:
 
 
 def calc_time_to_expiry(day, ts):
+    # Updated to perfectly match the Wiki's TTE offset
     days_left = (8 - day) - (ts / 1_000_000)
     return max(days_left / 250, 1e-8)
 
@@ -116,54 +111,16 @@ def update_ema(state_dict: Dict, key: str, value: float, window: int) -> float:
     return new_mean
 
 
-def trade_mean_reversion(velvet: Velvetfruit, state_dict: Dict) -> Dict[str, List[Order]]:
-    orders = {velvet.spot.name: []}
-    for call in velvet.call_options:
-        orders[call.name] = []
-
-    # 1. Underlying Asset Mean Reversion
-    if velvet.spot.fair_value:
-        ema_u = update_ema(state_dict, 'ema_u', velvet.spot.fair_value, velvet.mr_underlying_window)
-        u_dev = velvet.spot.fair_value - ema_u
-
-        if u_dev > velvet.mr_underlying_thr and velvet.spot.best_bid:
-            sell_qty = velvet.spot.limit + velvet.spot.position
-            if sell_qty > 0:
-                orders[velvet.spot.name].append(Order(velvet.spot.name, round(velvet.spot.best_bid), -sell_qty))
-        elif u_dev < -velvet.mr_underlying_thr and velvet.spot.best_ask:
-            buy_qty = velvet.spot.limit - velvet.spot.position
-            if buy_qty > 0:
-                orders[velvet.spot.name].append(Order(velvet.spot.name, round(velvet.spot.best_ask), buy_qty))
-
-    # 2. Deep ITM Option Proxy Hedge (Strike 4000)
-    deep_itm_call = next((c for c in velvet.call_options if c.strike_price == 4000), None)
-    if deep_itm_call and deep_itm_call.fair_value:
-        ema_o = update_ema(state_dict, 'ema_o', deep_itm_call.fair_value, velvet.mr_options_window)
-        o_dev = deep_itm_call.fair_value - ema_o
-
-        if o_dev > velvet.mr_options_thr and deep_itm_call.best_bid:
-            sell_qty = deep_itm_call.limit + deep_itm_call.position
-            if sell_qty > 0:
-                orders[deep_itm_call.name].append(Order(deep_itm_call.name, round(deep_itm_call.best_bid), -sell_qty))
-        elif o_dev < -velvet.mr_options_thr and deep_itm_call.best_ask:
-            buy_qty = deep_itm_call.limit - deep_itm_call.position
-            if buy_qty > 0:
-                orders[deep_itm_call.name].append(Order(deep_itm_call.name, round(deep_itm_call.best_ask), buy_qty))
-
-    return orders
-
-
 def trade_iv_scalping(velvet: Velvetfruit, state_dict: Dict) -> Dict[str, List[Order]]:
     orders = {call.name: [] for call in velvet.call_options}
 
     for call in velvet.call_options:
-        # Skip the deepest ITM call which is used for Mean Reversion proxy
-        if call.strike_price == 4000 or not call.fair_value or not call.theo_price:
+        if not call.fair_value or not call.theo_price:
             continue
 
         current_theo_diff = call.fair_value - call.theo_price
 
-        # EMA of the difference
+        # EMA of the difference between Market Price and Theoretical BS Price
         mean_theo_diff = update_ema(state_dict, f'mean_diff_{call.name}', current_theo_diff, velvet.theo_norm_window)
 
         # Mean Absolute Deviation (MAD) to detect if there is enough volatility to scalp
@@ -224,6 +181,7 @@ class Trader:
                     call.fair_value = (call.best_bid + call.best_ask) / 2
 
             # Calculate Greeks and gather Smile Data
+            # Note: Adjust 'day=3' to the actual historical day you are testing against if necessary
             tte = calc_time_to_expiry(day=3, ts=state.timestamp)
 
             if velvet.spot.fair_value:
@@ -256,19 +214,15 @@ class Trader:
                     if call.moneyness is not None:
                         # 1. Evaluate theoretical IV at this exact strike's moneyness
                         call.theo_iv = smile_func(call.moneyness)
+
                         # 2. Calculate Theoretical Black-Scholes Price
                         bs = BlackScholes(velvet.spot.fair_value, call.strike_price, tte)
                         call.theo_price = bs.call_price(call.theo_iv)
 
-                # --- EXECUTE HYBRID STRATEGY ---
-                # mr_orders = trade_mean_reversion(velvet, previous_state)
+                # --- EXECUTE IV SCALPING STRATEGY ---
                 iv_orders = trade_iv_scalping(velvet, previous_state)
 
-                # Combine orders
-                # for product_name, p_orders in mr_orders.items():
-                #     if p_orders:
-                #         result[product_name] = result.get(product_name, []) + p_orders
-
+                # Append orders
                 for product_name, p_orders in iv_orders.items():
                     if p_orders:
                         result[product_name] = result.get(product_name, []) + p_orders
