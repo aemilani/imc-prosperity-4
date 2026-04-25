@@ -87,11 +87,7 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
         if abs(best_ask_amount) <= hydrogel.volume_thr:
             standard_take = best_ask <= hydrogel.fair_value - hydrogel.take_thr
 
-            edge_to_mean = hydrogel.price_mean - best_ask
-            half_spread = best_ask - hydrogel.fair_value
-            mean_reversion_trade = (z_score < -hydrogel.z_score_take_thr) and (
-                        edge_to_mean > half_spread + hydrogel.take_thr)
-
+            mean_reversion_trade = z_score < -hydrogel.z_score_take_thr
             mean_reversion_clear = z_score < hydrogel.z_score_clear_thr and hydrogel.position < 0
             mean_reversion_take = mean_reversion_trade or mean_reversion_clear
 
@@ -113,11 +109,7 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
         if abs(best_bid_amount) <= hydrogel.volume_thr:
             standard_take = best_bid >= hydrogel.fair_value + hydrogel.take_thr
 
-            edge_to_mean = best_bid - hydrogel.price_mean
-            half_spread = hydrogel.fair_value - best_bid
-            mean_reversion_trade = (z_score > hydrogel.z_score_take_thr) and (
-                        edge_to_mean > half_spread + hydrogel.take_thr)
-
+            mean_reversion_trade = z_score > hydrogel.z_score_take_thr
             mean_reversion_clear = z_score > -hydrogel.z_score_clear_thr and hydrogel.position > 0
             mean_reversion_take = mean_reversion_trade or mean_reversion_clear
 
