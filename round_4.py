@@ -572,6 +572,9 @@ class Trader:
                 calls.append(make_call(strike))
 
             for call in calls:
+                if call.name not in state.order_depths:
+                    continue
+
                 orders: List[Order] = []
 
                 call.position = state.position.get(call.name, 0)
