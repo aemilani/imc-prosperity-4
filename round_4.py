@@ -49,18 +49,18 @@ class Hydrogel(Product):
 class Velvet(Product):
     name: str = 'VELVETFRUIT_EXTRACT'
     limit: int = 200
-    price_mean: float = 5250
-    price_std: float = 15
+    price_mean: float = 5248
+    price_std: float = 18
     z_score_take_thr: float = 1.5
 
 
 CALL_CONFIGS = {
-    4000: dict(limit=300, price_mean=1250, price_std=16, z_score_take_thr=1.9, vol_thr=15, mr_param=-0.05),
-    4500: dict(limit=300, price_mean=750, price_std=16, z_score_take_thr=1.7, vol_thr=15, mr_param=-0.05),
-    5000: dict(limit=300, price_mean=255, price_std=14, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.05),
-    5100: dict(limit=300, price_mean=167, price_std=13, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.08),
-    5200: dict(limit=300, price_mean=96,  price_std=10, z_score_take_thr=1.1, vol_thr=15, mr_param=-0.08),
-    5300: dict(limit=300, price_mean=47,  price_std=7, z_score_take_thr=1.0, vol_thr=15, mr_param=-0.14),
+    4000: dict(limit=300, price_mean=1248, price_std=18, z_score_take_thr=1.9, vol_thr=15, mr_param=-0.06),
+    4500: dict(limit=300, price_mean=748, price_std=18, z_score_take_thr=1.7, vol_thr=15, mr_param=-0.05),
+    5000: dict(limit=300, price_mean=251, price_std=17, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.07),
+    5100: dict(limit=300, price_mean=161, price_std=16, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.07),
+    5200: dict(limit=300, price_mean=89,  price_std=13, z_score_take_thr=1.1, vol_thr=15, mr_param=-0.1),
+    5300: dict(limit=300, price_mean=41,  price_std=9, z_score_take_thr=1.0, vol_thr=15, mr_param=-0.16),
 }
 
 
@@ -118,7 +118,7 @@ def calc_velvet_fair_value(state: TradingState, previous_state: Dict) -> float:
             return fair_value
         else:
             curr_logr = np.log(fair_value / previous_price)
-            next_logr = curr_logr * -0.04  # mean-reversion param
+            next_logr = curr_logr * -0.05  # mean-reversion param
             return fair_value * np.exp(next_logr)
     else:
         return previous_price
