@@ -39,8 +39,8 @@ class CallOption(Product):
 class Hydrogel(Product):
     name: str = 'HYDROGEL_PACK'
     limit: int = 200
-    price_mean: float = 9990
-    price_std: float = 32
+    price_mean: float = 9995
+    price_std: float = 35
     z_score_take_thr: float = 1.5
 
 
@@ -75,8 +75,8 @@ def calc_hydrogel_fair_value(state: TradingState, previous_state: Dict) -> float
         best_ask = min(order_depth.sell_orders.keys())
         best_bid = max(order_depth.buy_orders.keys())
 
-        filtered_asks = [price for price in order_depth.sell_orders.keys() if abs(order_depth.sell_orders[price]) >= 20]
-        filtered_bids = [price for price in order_depth.buy_orders.keys() if abs(order_depth.buy_orders[price]) >= 20]
+        filtered_asks = [price for price in order_depth.sell_orders.keys() if abs(order_depth.sell_orders[price]) >= 10]
+        filtered_bids = [price for price in order_depth.buy_orders.keys() if abs(order_depth.buy_orders[price]) >= 10]
         best_filtered_ask = min(filtered_asks) if len(filtered_asks) > 0 else None
         best_filtered_bid = max(filtered_bids) if len(filtered_bids) > 0 else None
 
@@ -89,7 +89,7 @@ def calc_hydrogel_fair_value(state: TradingState, previous_state: Dict) -> float
             return fair_value
         else:
             curr_logr = np.log(fair_value / previous_price)
-            next_logr = curr_logr * -0.03  # mean-reversion param
+            next_logr = curr_logr * -0.04  # mean-reversion param
             return fair_value * np.exp(next_logr)
     else:
         return previous_price
