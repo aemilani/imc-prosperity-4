@@ -272,38 +272,6 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
         hydrogel.posted_buy_volume += size
 
     if position_diff == 0 and hydrogel.position == 0:
-        # Position clearance
-        position_after_take = hydrogel.position + hydrogel.posted_buy_volume - hydrogel.posted_sell_volume
-        fair_for_bid = round(hydrogel.fair_value - hydrogel.clear_thr)
-        fair_for_ask = round(hydrogel.fair_value + hydrogel.clear_thr)
-        buy_quantity = hydrogel.limit - (hydrogel.position + hydrogel.posted_buy_volume)
-        sell_quantity = hydrogel.limit + (hydrogel.position - hydrogel.posted_sell_volume)
-
-        if position_after_take > 0:
-            # Aggregate volume from all buy orders with price greater than fair_for_ask
-            clear_quantity = sum(
-                volume
-                for price, volume in order_depth.buy_orders.items()
-                if price >= fair_for_ask
-            )
-            clear_quantity = min(clear_quantity, position_after_take)
-            sent_quantity = min(sell_quantity, clear_quantity)
-            if sent_quantity > 0:
-                orders.append(Order(hydrogel.name, fair_for_ask, -abs(sent_quantity)))
-                hydrogel.posted_sell_volume += abs(sent_quantity)
-
-        if position_after_take < 0:
-            # Aggregate volume from all sell orders with price lower than fair_for_bid
-            clear_quantity = sum(
-                abs(volume)
-                for price, volume in order_depth.sell_orders.items()
-                if price <= fair_for_bid
-            )
-            clear_quantity = min(clear_quantity, abs(position_after_take))
-            sent_quantity = min(buy_quantity, clear_quantity)
-            if sent_quantity > 0:
-                orders.append(Order(hydrogel.name, fair_for_bid, abs(sent_quantity)))
-                hydrogel.posted_buy_volume += abs(sent_quantity)
 
         # Market making
         best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None

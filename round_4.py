@@ -39,6 +39,7 @@ class CallOption(Product):
 class Hydrogel(Product):
     name: str = 'HYDROGEL_PACK'
     limit: int = 200
+    default_thr: int = 8
     price_mean: float = 9995
     price_std: float = 35
     z_score_take_thr: float = 1.5
@@ -260,12 +261,62 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
 
         size = min(position_diff, best_bid_amount)
         orders.append(Order(hydrogel.name, best_bid, -size))
+        hydrogel.posted_sell_volume += size
     elif position_diff < 0 and len(order_depth.sell_orders) != 0:  # BUY
         best_ask = min(order_depth.sell_orders.keys())
         best_ask_amount = -1 * order_depth.sell_orders[best_ask]
 
         size = min(-position_diff, best_ask_amount)
         orders.append(Order(hydrogel.name, best_ask, size))
+        hydrogel.posted_buy_volume += size
+
+    if position_diff == 0 and hydrogel.position == 0:
+
+        # Market making
+        best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
+        best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
+
+        whale_bid_price = None
+        if order_depth.buy_orders:
+            for price, volume in order_depth.buy_orders.items():
+                if 10 <= volume <= 15:
+                    whale_bid_price = price
+                    break  # Found him!
+
+        whale_ask_price = None
+        if order_depth.sell_orders:
+            for price, volume in order_depth.sell_orders.items():
+                if -15 <= volume <= -10:
+                    whale_ask_price = price
+                    break  # Found him!
+
+        if best_bid and best_ask and (best_ask - best_bid > 1):
+            if whale_bid_price:
+                my_mm_bid = whale_bid_price + 1  # penny
+            else:
+                my_mm_bid = best_bid + 1  # Fallback if Whale isn't detected
+
+            if whale_ask_price:
+                my_mm_ask = whale_ask_price - 1  # penny
+            else:
+                my_mm_ask = best_ask - 1  # Fallback if Whale isn't detected
+
+            if my_mm_bid >= best_ask:
+                my_mm_bid = best_ask - 1
+            if my_mm_ask <= best_bid:
+                my_mm_ask = best_bid + 1
+
+        else:
+            my_mm_bid = hydrogel.fair_value - hydrogel.default_thr
+            my_mm_ask = hydrogel.fair_value + hydrogel.default_thr
+
+        buy_quantity = hydrogel.limit - (hydrogel.position + hydrogel.posted_buy_volume)
+        if buy_quantity > 0:
+            orders.append(Order(hydrogel.name, round(my_mm_bid), buy_quantity))  # Buy order
+
+        sell_quantity = hydrogel.limit + (hydrogel.position - hydrogel.posted_sell_volume)
+        if sell_quantity > 0:
+            orders.append(Order(hydrogel.name, round(my_mm_ask), -sell_quantity))  # Sell order
 
     return orders
 
