@@ -39,6 +39,7 @@ class CallOption(Product):
 class Hydrogel(Product):
     name: str = 'HYDROGEL_PACK'
     limit: int = 200
+    take_thr: int = 1
     default_thr: int = 8
     price_mean: float = 9995
     price_std: float = 35
@@ -49,6 +50,8 @@ class Hydrogel(Product):
 class Velvet(Product):
     name: str = 'VELVETFRUIT_EXTRACT'
     limit: int = 200
+    take_thr: int = 1
+    default_thr: int = 2.5
     price_mean: float = 5248
     price_std: float = 18
     z_score_take_thr: float = 1.5
@@ -273,6 +276,36 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
         hydrogel.posted_buy_volume += size
 
     if position_diff == 0 and hydrogel.position == 0:
+
+        # Market taking
+        if len(order_depth.sell_orders) != 0:
+            best_ask = min(order_depth.sell_orders.keys())
+            best_ask_amount = -1 * order_depth.sell_orders[best_ask]
+
+            if best_ask <= hydrogel.fair_value - hydrogel.take_thr:
+                quantity = min(
+                    best_ask_amount, hydrogel.limit - hydrogel.position
+                )
+                if quantity > 0:
+                    orders.append(Order(hydrogel.name, best_ask, quantity))
+                    hydrogel.posted_buy_volume += quantity
+                    order_depth.sell_orders[best_ask] += quantity
+                    if order_depth.sell_orders[best_ask] == 0:
+                        del order_depth.sell_orders[best_ask]
+        if len(order_depth.buy_orders) != 0:
+            best_bid = max(order_depth.buy_orders.keys())
+            best_bid_amount = order_depth.buy_orders[best_bid]
+
+            if best_bid >= hydrogel.fair_value + hydrogel.take_thr:
+                quantity = min(
+                    best_bid_amount, hydrogel.limit + hydrogel.position
+                )
+                if quantity > 0:
+                    orders.append(Order(hydrogel.name, best_bid, -1 * quantity))
+                    hydrogel.posted_sell_volume += quantity
+                    order_depth.buy_orders[best_bid] -= quantity
+                    if order_depth.buy_orders[best_bid] == 0:
+                        del order_depth.buy_orders[best_bid]
 
         # Market making
         best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
