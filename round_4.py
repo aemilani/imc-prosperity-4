@@ -385,12 +385,92 @@ def trade_velvet(state: TradingState, velvet:Velvet) -> List[Order]:
 
         size = min(position_diff, best_bid_amount)
         orders.append(Order(velvet.name, best_bid, -size))
+        velvet.posted_sell_volume += size
     elif position_diff < 0 and len(order_depth.sell_orders) != 0:  # BUY
         best_ask = min(order_depth.sell_orders.keys())
         best_ask_amount = -1 * order_depth.sell_orders[best_ask]
 
         size = min(-position_diff, best_ask_amount)
         orders.append(Order(velvet.name, best_ask, size))
+        velvet.posted_buy_volume += size
+
+    if position_diff == 0 and velvet.position == 0:
+
+        # Market taking
+        if len(order_depth.sell_orders) != 0:
+            best_ask = min(order_depth.sell_orders.keys())
+            best_ask_amount = -1 * order_depth.sell_orders[best_ask]
+
+            if best_ask <= velvet.fair_value - velvet.take_thr:
+                quantity = min(
+                    best_ask_amount, velvet.limit - velvet.position
+                )
+                if quantity > 0:
+                    orders.append(Order(velvet.name, best_ask, quantity))
+                    velvet.posted_buy_volume += quantity
+                    order_depth.sell_orders[best_ask] += quantity
+                    if order_depth.sell_orders[best_ask] == 0:
+                        del order_depth.sell_orders[best_ask]
+        if len(order_depth.buy_orders) != 0:
+            best_bid = max(order_depth.buy_orders.keys())
+            best_bid_amount = order_depth.buy_orders[best_bid]
+
+            if best_bid >= velvet.fair_value + velvet.take_thr:
+                quantity = min(
+                    best_bid_amount, velvet.limit + velvet.position
+                )
+                if quantity > 0:
+                    orders.append(Order(velvet.name, best_bid, -1 * quantity))
+                    velvet.posted_sell_volume += quantity
+                    order_depth.buy_orders[best_bid] -= quantity
+                    if order_depth.buy_orders[best_bid] == 0:
+                        del order_depth.buy_orders[best_bid]
+
+        # Market making
+        best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
+        best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
+
+        whale_bid_price = None
+        if order_depth.buy_orders:
+            for price, volume in order_depth.buy_orders.items():
+                if 15 <= volume <= 25:
+                    whale_bid_price = price
+                    break  # Found him!
+
+        whale_ask_price = None
+        if order_depth.sell_orders:
+            for price, volume in order_depth.sell_orders.items():
+                if -25 <= volume <= -15:
+                    whale_ask_price = price
+                    break  # Found him!
+
+        if best_bid and best_ask and (best_ask - best_bid > 1):
+            if whale_bid_price:
+                my_mm_bid = whale_bid_price + 1  # penny
+            else:
+                my_mm_bid = best_bid + 1  # Fallback if Whale isn't detected
+
+            if whale_ask_price:
+                my_mm_ask = whale_ask_price - 1  # penny
+            else:
+                my_mm_ask = best_ask - 1  # Fallback if Whale isn't detected
+
+            if my_mm_bid >= best_ask:
+                my_mm_bid = best_ask - 1
+            if my_mm_ask <= best_bid:
+                my_mm_ask = best_bid + 1
+
+        else:
+            my_mm_bid = velvet.fair_value - velvet.default_thr
+            my_mm_ask = velvet.fair_value + velvet.default_thr
+
+        buy_quantity = velvet.limit - (velvet.position + velvet.posted_buy_volume)
+        if buy_quantity > 0:
+            orders.append(Order(velvet.name, round(my_mm_bid), buy_quantity))  # Buy order
+
+        sell_quantity = velvet.limit + (velvet.position - velvet.posted_sell_volume)
+        if sell_quantity > 0:
+            orders.append(Order(velvet.name, round(my_mm_ask), -sell_quantity))  # Sell order
 
     return orders
 
