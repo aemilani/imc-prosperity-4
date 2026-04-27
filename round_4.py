@@ -56,11 +56,11 @@ class Velvet(Product):
 
 CALL_CONFIGS = {
     4000: dict(limit=300, price_mean=1248, price_std=18, z_score_take_thr=1.9, vol_thr=7, mr_param=-0.07),
-    4500: dict(limit=300, price_mean=748, price_std=18, z_score_take_thr=1.7, vol_thr=15, mr_param=-0.07),
+    4500: dict(limit=300, price_mean=748, price_std=18, z_score_take_thr=1.7, vol_thr=15, mr_param=-0.05),
     5000: dict(limit=300, price_mean=251, price_std=17, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.07),
-    5100: dict(limit=300, price_mean=161, price_std=16, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.08),
-    5200: dict(limit=300, price_mean=89,  price_std=13, z_score_take_thr=1.1, vol_thr=15, mr_param=-0.12),
-    5300: dict(limit=300, price_mean=41,  price_std=9, z_score_take_thr=1.0, vol_thr=13, mr_param=-0.20),
+    5100: dict(limit=300, price_mean=161, price_std=16, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.07),
+    5200: dict(limit=300, price_mean=89,  price_std=13, z_score_take_thr=1.1, vol_thr=15, mr_param=-0.1),
+    5300: dict(limit=300, price_mean=41,  price_std=9, z_score_take_thr=1.0, vol_thr=13, mr_param=-0.16),
 }
 
 
