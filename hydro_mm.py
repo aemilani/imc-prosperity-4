@@ -73,62 +73,7 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
     if not hydrogel.fair_value:
         return orders
 
-    # z_score = (hydrogel.fair_value - hydrogel.price_mean) / hydrogel.price_std
-
-    # Market taking
-    if len(order_depth.sell_orders) != 0:  # BUY
-        best_ask = min(order_depth.sell_orders.keys())
-        best_ask_amount = -1 * order_depth.sell_orders[best_ask]
-
-        if abs(best_ask_amount) <= hydrogel.volume_thr:
-            standard_take = best_ask <= hydrogel.fair_value - hydrogel.take_thr
-
-            # edge_to_mean = hydrogel.price_mean - best_ask
-            # half_spread = best_ask - hydrogel.fair_value
-            # mean_reversion_trade = (z_score < -hydrogel.z_score_take_thr) and (
-            #             edge_to_mean > half_spread + hydrogel.take_thr)
-            #
-            # mean_reversion_clear = z_score < hydrogel.z_score_clear_thr and hydrogel.position < 0
-            # mean_reversion_take = mean_reversion_trade or mean_reversion_clear
-            mean_reversion_take = False
-
-            if standard_take or mean_reversion_take:
-                quantity = min(
-                    best_ask_amount, hydrogel.limit - hydrogel.position
-                )  # max amt to buy
-                if quantity > 0:
-                    orders.append(Order(hydrogel.name, best_ask, quantity))
-                    hydrogel.posted_buy_volume += quantity
-                    order_depth.sell_orders[best_ask] += quantity
-                    if order_depth.sell_orders[best_ask] == 0:
-                        del order_depth.sell_orders[best_ask]
-
-    if len(order_depth.buy_orders) != 0:  # SELL
-        best_bid = max(order_depth.buy_orders.keys())
-        best_bid_amount = order_depth.buy_orders[best_bid]
-
-        if abs(best_bid_amount) <= hydrogel.volume_thr:
-            standard_take = best_bid >= hydrogel.fair_value + hydrogel.take_thr
-
-            # edge_to_mean = best_bid - hydrogel.price_mean
-            # half_spread = hydrogel.fair_value - best_bid
-            # mean_reversion_trade = (z_score > hydrogel.z_score_take_thr) and (
-            #             edge_to_mean > half_spread + hydrogel.take_thr)
-            #
-            # mean_reversion_clear = z_score > -hydrogel.z_score_clear_thr and hydrogel.position > 0
-            # mean_reversion_take = mean_reversion_trade or mean_reversion_clear
-            mean_reversion_take = False
-
-            if standard_take or mean_reversion_take:
-                quantity = min(
-                    best_bid_amount, hydrogel.limit + hydrogel.position
-                )  # should be the max we can sell
-                if quantity > 0:
-                    orders.append(Order(hydrogel.name, best_bid, -1 * quantity))
-                    hydrogel.posted_sell_volume += quantity
-                    order_depth.buy_orders[best_bid] -= quantity
-                    if order_depth.buy_orders[best_bid] == 0:
-                        del order_depth.buy_orders[best_bid]
+    # TODO: Do the rest only when target_position=0 or position=0 or (position_diff=0 and position=0)
 
     # Position clearance
     position_after_take = hydrogel.position + hydrogel.posted_buy_volume - hydrogel.posted_sell_volume
@@ -164,34 +109,50 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
             hydrogel.posted_buy_volume += abs(sent_quantity)
 
     # Market making
-    asks_above_fair = [
-        price
-        for price, volume in order_depth.sell_orders.items()
-        if (price > hydrogel.fair_value + hydrogel.disregard_thr) and (abs(volume) >= 10)
-    ]
-    bids_below_fair = [
-        price
-        for price, volume in order_depth.buy_orders.items()
-        if (price < hydrogel.fair_value - hydrogel.disregard_thr) and (abs(volume) >= 10)
-    ]
-    best_ask_above_fair = min(asks_above_fair) if len(asks_above_fair) > 0 else None
-    best_bid_below_fair = max(bids_below_fair) if len(bids_below_fair) > 0 else None
+    best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
+    best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
 
-    ask = round(hydrogel.fair_value + hydrogel.default_thr)
-    if best_ask_above_fair is not None:
-        ask = best_ask_above_fair - 1  # penny
+    whale_bid_price = None
+    if order_depth.buy_orders:
+        for price, volume in order_depth.buy_orders.items():
+            if 10 <= volume <= 15:
+                whale_bid_price = price
+                break  # Found him!
 
-    bid = round(hydrogel.fair_value - hydrogel.default_thr)
-    if best_bid_below_fair is not None:
-        bid = best_bid_below_fair + 1  # penny
+    whale_ask_price = None
+    if order_depth.sell_orders:
+        for price, volume in order_depth.sell_orders.items():
+            if -15 <= volume <= -10:
+                whale_ask_price = price
+                break  # Found him!
+
+    if best_bid and best_ask and (best_ask - best_bid > 1):
+        if whale_bid_price:
+            my_mm_bid = whale_bid_price + 1  # penny
+        else:
+            my_mm_bid = best_bid + 1  # Fallback if Whale isn't detected
+
+        if whale_ask_price:
+            my_mm_ask = whale_ask_price - 1  # penny
+        else:
+            my_mm_ask = best_ask - 1  # Fallback if Whale isn't detected
+
+        if my_mm_bid >= best_ask:
+            my_mm_bid = best_ask - 1
+        if my_mm_ask <= best_bid:
+            my_mm_ask = best_bid + 1
+
+    else:
+        my_mm_bid = hydrogel.fair_value - hydrogel.default_thr
+        my_mm_ask = hydrogel.fair_value + hydrogel.default_thr
 
     buy_quantity = hydrogel.limit - (hydrogel.position + hydrogel.posted_buy_volume)
     if buy_quantity > 0:
-        orders.append(Order(hydrogel.name, round(bid), buy_quantity))  # Buy order
+        orders.append(Order(hydrogel.name, round(my_mm_bid), buy_quantity))  # Buy order
 
     sell_quantity = hydrogel.limit + (hydrogel.position - hydrogel.posted_sell_volume)
     if sell_quantity > 0:
-        orders.append(Order(hydrogel.name, round(ask), -sell_quantity))  # Sell order
+        orders.append(Order(hydrogel.name, round(my_mm_ask), -sell_quantity))  # Sell order
 
     return orders
 
