@@ -60,12 +60,12 @@ class Velvet(Product):
 CALL_CONFIGS = {
     4000: dict(limit=300, price_mean=1248, price_std=18, z_score_take_thr=1.9, vol_thr=7, mr_param=-0.07),
     4500: dict(limit=300, price_mean=748, price_std=18, z_score_take_thr=1.7, vol_thr=15, mr_param=-0.05),
-    5000: dict(limit=300, price_mean=251, price_std=17, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.07),
-    5100: dict(limit=300, price_mean=161, price_std=16, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.07),
+    5000: dict(limit=300, price_mean=251, price_std=17, z_score_take_thr=1.4, vol_thr=15, mr_param=-0.07),
+    5100: dict(limit=300, price_mean=161, price_std=16, z_score_take_thr=1.3, vol_thr=15, mr_param=-0.07),
     5200: dict(limit=300, price_mean=89,  price_std=13, z_score_take_thr=1.1, vol_thr=15, mr_param=-0.1),
     5300: dict(limit=300, price_mean=41,  price_std=9, z_score_take_thr=1.0, vol_thr=13, mr_param=-0.16),
-    5400: dict(limit=300, price_mean=13,  price_std=4, z_score_take_thr=1.0, vol_thr=11, mr_param=-0.29),
-    5500: dict(limit=300, price_mean=5,  price_std=2, z_score_take_thr=1.0, vol_thr=15, mr_param=-0.24),
+    5400: dict(limit=300, price_mean=13,  price_std=4, z_score_take_thr=1.1, vol_thr=11, mr_param=-0.29),
+    5500: dict(limit=300, price_mean=5,  price_std=2, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.24),
 }
 
 
@@ -275,7 +275,7 @@ def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
         orders.append(Order(hydrogel.name, best_ask, size))
         hydrogel.posted_buy_volume += size
 
-    if position_diff == 0 and hydrogel.position == 0:
+    if position_diff == 0 and -0.2 * hydrogel.limit <= hydrogel.position <= 0.2 * hydrogel.limit:
 
         # Market taking
         if len(order_depth.sell_orders) != 0:
@@ -394,7 +394,7 @@ def trade_velvet(state: TradingState, velvet:Velvet) -> List[Order]:
         orders.append(Order(velvet.name, best_ask, size))
         velvet.posted_buy_volume += size
 
-    if position_diff == 0 and velvet.position == 0:
+    if position_diff == 0 and -0.2 * velvet.limit <= velvet.position <= 0.2 * velvet.limit:
 
         # Market taking
         if len(order_depth.sell_orders) != 0:
