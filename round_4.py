@@ -61,6 +61,8 @@ CALL_CONFIGS = {
     5100: dict(limit=300, price_mean=161, price_std=16, z_score_take_thr=1.2, vol_thr=15, mr_param=-0.07),
     5200: dict(limit=300, price_mean=89,  price_std=13, z_score_take_thr=1.1, vol_thr=15, mr_param=-0.1),
     5300: dict(limit=300, price_mean=41,  price_std=9, z_score_take_thr=1.0, vol_thr=13, mr_param=-0.16),
+    5400: dict(limit=300, price_mean=13,  price_std=4, z_score_take_thr=1.0, vol_thr=11, mr_param=-0.29),
+    5500: dict(limit=300, price_mean=5,  price_std=2, z_score_take_thr=1.0, vol_thr=15, mr_param=-0.24),
 }
 
 
