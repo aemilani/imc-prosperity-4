@@ -16,6 +16,7 @@ class Spread:
     price_std: float
     window_size: int
     z_score_thr: float
+    position: int = 0
 
     def __post_init__(self):
         self.limit = 10 // np.abs(self.product_weights).max()
@@ -28,8 +29,74 @@ class SpreadSleep(Spread):
         'SLEEP_POD_SUEDE', 'SLEEP_POD_LAMB_WOOL', 'SLEEP_POD_POLYESTER', 'SLEEP_POD_NYLON', 'SLEEP_POD_COTTON'
     )
     product_weights: Tuple[int] = (1, -1, -2, -1, -1)
-    price_mean: float = 0
-    price_std: float = 0
+    price_mean: float = -1115
+    price_std: float = 528
+
+
+@dataclass
+class SpreadMicrochip(Spread):
+    name: str = 'SPREAD_MICROCHIP'
+    product_names: Tuple[str] = (
+        'MICROCHIP_CIRCLE','MICROCHIP_OVAL','MICROCHIP_SQUARE','MICROCHIP_RECTANGLE','MICROCHIP_TRIANGLE'
+    )
+    product_weights: Tuple[int] = (1, 1, 0, -1, -1)
+    price_mean: float = -907
+    price_std: float = 630
+
+
+@dataclass
+class SpreadPebbles(Spread):
+    name: str = 'SPREAD_PEBBLES'
+    product_names: Tuple[str] = (
+        'PEBBLES_XS', 'PEBBLES_S', 'PEBBLES_M', 'PEBBLES_L', 'PEBBLES_XL'
+    )
+    product_weights: Tuple[int] = (1, 1, 1, 1, 1)
+
+
+@dataclass
+class SpreadRobot(Spread):
+    name: str = 'SPREAD_ROBOT'
+    product_names: Tuple[str] = (
+        'ROBOT_VACUUMING', 'ROBOT_MOPPING', 'ROBOT_DISHES', 'ROBOT_LAUNDRY', 'ROBOT_IRONING'
+    )
+    product_weights: Tuple[int] = (1, 1, 1, 0, 1)
+    price_mean: float = 38801
+    price_std: float = 386
+
+
+@dataclass
+class SpreadTranslator(Spread):
+    name: str = 'SPREAD_TRANSLATOR'
+    product_names: Tuple[str] = (
+        'TRANSLATOR_SPACE_GRAY', 'TRANSLATOR_ASTRO_BLACK', 'TRANSLATOR_ECLIPSE_CHARCOAL',
+        'TRANSLATOR_GRAPHITE_MIST', 'TRANSLATOR_VOID_BLUE'
+    )
+    product_weights: Tuple[int] = (0, 1, -1, 0, 1)
+    price_mean: float = 10630
+    price_std: float = 423
+
+
+@dataclass
+class SpreadOxygen(Spread):
+    name: str = 'SPREAD_OXYGEN'
+    product_names: Tuple[str] = (
+        'OXYGEN_SHAKE_MORNING_BREATH', 'OXYGEN_SHAKE_EVENING_BREATH', 'OXYGEN_SHAKE_MINT',
+        'OXYGEN_SHAKE_CHOCOLATE', 'OXYGEN_SHAKE_GARLIC'
+    )
+    product_weights: Tuple[int] = (1, 1, 0, -1, 1)
+    price_mean: float = 21705
+    price_std: float = 559
+
+
+@dataclass
+class SpreadSnackpack(Spread):
+    name: str = 'SPREAD_SNACKPACK'
+    product_names: Tuple[str] = (
+        'SNACKPACK_CHOCOLATE', 'SNACKPACK_VANILLA', 'SNACKPACK_PISTACHIO', 'SNACKPACK_STRAWBERRY', 'SNACKPACK_RASPBERRY'
+    )
+    product_weights: Tuple[int] = (0, 0, 0, 0, 1)
+    price_mean: float = 10117
+    price_std: float = 186
 
 
 def calc_ema_stats(previous_state: Dict, spr: Spread) -> tuple[float, float]:
@@ -85,14 +152,12 @@ def trade_mean_reversion(state: TradingState, spr: Spread) -> List[Order]:
 
         size = min(position_diff, best_bid_amount)
         orders.append(Order(spr.name, best_bid, -size))
-        spr.posted_sell_volume += size
     elif position_diff < 0 and len(order_depth.sell_orders) != 0:  # BUY
         best_ask = min(order_depth.sell_orders.keys())
         best_ask_amount = -1 * order_depth.sell_orders[best_ask]
 
         size = min(-position_diff, best_ask_amount)
         orders.append(Order(spr.name, best_ask, size))
-        spr.posted_buy_volume += size
 
     return orders
 
@@ -111,7 +176,6 @@ class Trader:
         result = {}
         for product_name in state.order_depths:
             orders: List[Order] = []
-            prod = make_product(product_name)
 
             position = state.position.get(product_name, 0)
             prod.position = position
