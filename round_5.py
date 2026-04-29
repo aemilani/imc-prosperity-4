@@ -29,8 +29,10 @@ class SpreadSleep(Spread):
         'SLEEP_POD_SUEDE', 'SLEEP_POD_LAMB_WOOL', 'SLEEP_POD_POLYESTER', 'SLEEP_POD_NYLON', 'SLEEP_POD_COTTON'
     )
     product_weights: Tuple[int, ...] = (1, -1, -1, 1, 0)
-    price_mean: float = -1115
-    price_std: float = 528
+    price_mean: float = -1176
+    price_std: float = 536
+    window_size: int = 8000
+    z_score_thr: float = 1.1
 
 
 @dataclass
@@ -42,6 +44,8 @@ class SpreadMicrochip(Spread):
     product_weights: Tuple[int, ...] = (1, 1, 0, -1, -1)
     price_mean: float = -907
     price_std: float = 630
+    window_size: int = 7000
+    z_score_thr: float = 1.4
 
 
 @dataclass
@@ -62,6 +66,8 @@ class SpreadRobot(Spread):
     product_weights: Tuple[int, ...] = (1, 1, 1, 0, 1)
     price_mean: float = 38801
     price_std: float = 386
+    window_size: int = 13000
+    z_score_thr: float = 1.3
 
 
 @dataclass
@@ -74,6 +80,8 @@ class SpreadTranslator(Spread):
     product_weights: Tuple[int, ...] = (0, 1, -1, 0, 1)
     price_mean: float = 10630
     price_std: float = 423
+    window_size: int = 8000
+    z_score_thr: float = 1.1
 
 
 @dataclass
@@ -86,6 +94,8 @@ class SpreadOxygen(Spread):
     product_weights: Tuple[int, ...] = (1, 1, 0, -1, 1)
     price_mean: float = 21705
     price_std: float = 559
+    window_size: int = 15000
+    z_score_thr: float = 1.4
 
 
 @dataclass
@@ -97,6 +107,8 @@ class SpreadSnackpack(Spread):
     product_weights: Tuple[int, ...] = (0, 0, 0, 0, 1)
     price_mean: float = 10117
     price_std: float = 186
+    window_size: int = 18000
+    z_score_thr: float = 1.3
 
 
 def get_spread_position(state: TradingState, spr: Spread) -> int:
