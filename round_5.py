@@ -225,7 +225,7 @@ def calc_ema_stats(previous_state: Dict, spr: Spread) -> tuple[float, float]:
 def trade_mean_reversion(state: TradingState, spr: Spread) -> Dict[str, List[Order]]:
     orders: Dict[str, List[Order]] = {key: [] for key in spr.product_names}
 
-    if not spr.fair_value:
+    if spr.fair_value is None:
         return orders
 
     order_depth = get_spread_order_depth(state, spr)
