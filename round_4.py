@@ -159,7 +159,7 @@ def calc_vev_fair_value(state: TradingState, previous_state: Dict, vev: CallOpti
         return previous_price
 
 
-def calc_hydrogel_ema_stats(previous_state: Dict, hydrogel:Hydrogel) -> tuple[float, float]:
+def calc_hydrogel_ema_stats(previous_state: Dict, hydrogel: Hydrogel) -> tuple[float, float]:
     current_price = hydrogel.fair_value
     ema_mean = hydrogel.price_mean
     ema_std = hydrogel.price_std
@@ -237,7 +237,7 @@ def calc_vev_ema_stats(previous_state: Dict, vev:CallOption) -> tuple[float, flo
     return ema_mean, current_std
 
 
-def trade_hydrogel(state: TradingState, hydrogel:Hydrogel) -> List[Order]:
+def trade_hydrogel(state: TradingState, hydrogel: Hydrogel) -> List[Order]:
     order_depth: OrderDepth = state.order_depths['HYDROGEL_PACK']
     orders: List[Order] = []
 
