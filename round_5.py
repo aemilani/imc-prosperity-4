@@ -100,9 +100,27 @@ class SpreadSnackpack(Spread):
 
 
 def get_spread_position(state: TradingState, spr: Spread) -> int:
-    prod_idx = spr.product_weights.index(1)
-    prod = spr.product_names[prod_idx]
-    return state.position.get(prod, 0)
+    rs = []
+    anchor_sign = 0
+
+    for name, w in zip(spr.product_names, spr.product_weights):
+        if w == 0:
+            continue
+
+        pos = state.position.get(name, 0)
+        rs.append(abs(pos) // abs(w))
+
+        if anchor_sign == 0 and pos != 0:
+            # If position and weight have the same sign, we are Long (+1)
+            # If position and weight have opposite signs, we are Short (-1)
+            anchor_sign = 1 if (pos * w > 0) else -1
+
+    if not rs:
+        return 0
+
+    r = min(rs)
+
+    return r * anchor_sign
 
 
 def get_spread_products_orders(state: TradingState, spr: Spread) -> Tuple[List[int], List[int], List[int], List[int]]:
@@ -135,13 +153,14 @@ def get_spread_order_depth(state: TradingState, spr: Spread) -> OrderDepth:
         if w > 0:
             spread_bid += bid * w
             spread_ask += ask * w
-            spread_bid_volumes.append(abs(bid_vol // w))
-            spread_ask_volumes.append(abs(ask_vol // w))
+            spread_bid_volumes.append(bid_vol // abs(w))
+            spread_ask_volumes.append(ask_vol // abs(w))
         if w < 0:
             spread_bid += ask * w
             spread_ask += bid * w
-            spread_bid_volumes.append(abs(ask_vol // w))
-            spread_ask_volumes.append(abs(bid_vol // w))
+            spread_bid_volumes.append(ask_vol // abs(w))
+            spread_ask_volumes.append(bid_vol // abs(w))
+
     spread_bid_volume = min(spread_bid_volumes)
     spread_ask_volume = min(spread_ask_volumes)
     spread_order_depth.buy_orders[spread_bid] = spread_bid_volume
