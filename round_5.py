@@ -114,8 +114,8 @@ def get_spread_products_orders(state: TradingState, spr: Spread) -> Tuple[List[i
                     if order_depths[product].buy_orders else 0)
         best_ask = (min(order_depths[product].sell_orders.keys())
                     if order_depths[product].sell_orders else float("inf"))
-        best_bid_volume = order_depths[product].buy_orders[best_bid]
-        best_ask_volume = -order_depths[product].sell_orders[best_ask]
+        best_bid_volume = order_depths[product].buy_orders.get(best_bid, 0)
+        best_ask_volume = -order_depths[product].sell_orders.get(best_ask, 0)
         best_bids.append(best_bid)
         best_asks.append(best_ask)
         best_bid_volumes.append(best_bid_volume)
@@ -215,14 +215,14 @@ def trade_mean_reversion(state: TradingState, spr: Spread) -> Dict[str, List[Ord
         for product, w, bid, ask in zip(product_names, spr.product_weights, best_bids, best_asks):
             if w > 0:
                 orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
-            else:
+            elif w < 0:
                 orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
     elif position_diff < 0:  # buy spread
         size = min(-position_diff, best_ask_size)
         for product, w, bid, ask in zip(product_names, spr.product_weights, best_bids, best_asks):
             if w > 0:
                 orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
-            else:
+            elif w < 0:
                 orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
 
     return orders
@@ -241,9 +241,9 @@ def trade_pebbles(state: TradingState, pbl: SpreadPebbles) -> Dict[str, List[Ord
     best_ask_size = abs(order_depth.sell_orders[best_ask])
 
     if pbl.fair_value >= 50013:
-        target_position = pbl.limit
-    elif pbl.fair_value <= 49984:
         target_position = -pbl.limit
+    elif pbl.fair_value <= 49984:
+        target_position = pbl.limit
     else:
         target_position = pbl.position
 
@@ -257,14 +257,14 @@ def trade_pebbles(state: TradingState, pbl: SpreadPebbles) -> Dict[str, List[Ord
         for product, w, bid, ask in zip(product_names, pbl.product_weights, best_bids, best_asks):
             if w > 0:
                 orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
-            else:
+            elif w < 0:
                 orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
     elif position_diff < 0:  # buy spread
         size = min(-position_diff, best_ask_size)
         for product, w, bid, ask in zip(product_names, pbl.product_weights, best_bids, best_asks):
             if w > 0:
                 orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
-            else:
+            elif w < 0:
                 orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
 
     return orders
