@@ -271,9 +271,6 @@ def trade_mean_reversion(state: TradingState, spr: Spread) -> Dict[str, List[Ord
 def trade_pebbles(state: TradingState, pbl: SpreadPebbles) -> Dict[str, List[Order]]:
     orders: Dict[str, List[Order]] = {key: [] for key in pbl.product_names}
 
-    if not pbl.fair_value:
-        return orders
-
     order_depth = get_spread_order_depth(state, pbl)
     if not order_depth.buy_orders or not order_depth.sell_orders:
         return orders
@@ -283,9 +280,9 @@ def trade_pebbles(state: TradingState, pbl: SpreadPebbles) -> Dict[str, List[Ord
     best_bid_size = abs(order_depth.buy_orders[best_bid])
     best_ask_size = abs(order_depth.sell_orders[best_ask])
 
-    if pbl.fair_value >= 50013:
+    if best_bid > 50000:
         target_position = -pbl.limit
-    elif pbl.fair_value <= 49984:
+    elif best_ask < 50000:
         target_position = pbl.limit
     else:
         target_position = pbl.position
