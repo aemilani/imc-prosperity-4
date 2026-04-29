@@ -28,7 +28,7 @@ class SpreadSleep(Spread):
     product_names: Tuple[str, ...] = (
         'SLEEP_POD_SUEDE', 'SLEEP_POD_LAMB_WOOL', 'SLEEP_POD_POLYESTER', 'SLEEP_POD_NYLON', 'SLEEP_POD_COTTON'
     )
-    product_weights: Tuple[int, ...] = (1, -1, -2, -1, -1)
+    product_weights: Tuple[int, ...] = (1, -1, -1, 1, 0)
     price_mean: float = -1115
     price_std: float = 528
 
