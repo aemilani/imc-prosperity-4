@@ -10,7 +10,7 @@ from typing import List, Dict, Tuple
 class Spread:
     name: str
     product_names: Tuple[str, ...]
-    product_weights: Tuple[int]
+    product_weights: Tuple[int, ...]
     price_mean: float = None
     price_std: float = None
     z_score_thr: float = 1.5
@@ -19,7 +19,7 @@ class Spread:
     position: int = 0
 
     def __post_init__(self):
-        self.limit = 10 // np.abs(self.product_weights).max()
+        self.limit = int(10 // np.abs(self.product_weights).max())
 
 
 @dataclass
@@ -28,7 +28,7 @@ class SpreadSleep(Spread):
     product_names: Tuple[str, ...] = (
         'SLEEP_POD_SUEDE', 'SLEEP_POD_LAMB_WOOL', 'SLEEP_POD_POLYESTER', 'SLEEP_POD_NYLON', 'SLEEP_POD_COTTON'
     )
-    product_weights: Tuple[int] = (1, -1, -2, -1, -1)
+    product_weights: Tuple[int, ...] = (1, -1, -2, -1, -1)
     price_mean: float = -1115
     price_std: float = 528
 
@@ -39,7 +39,7 @@ class SpreadMicrochip(Spread):
     product_names: Tuple[str, ...] = (
         'MICROCHIP_CIRCLE','MICROCHIP_OVAL','MICROCHIP_SQUARE','MICROCHIP_RECTANGLE','MICROCHIP_TRIANGLE'
     )
-    product_weights: Tuple[int] = (1, 1, 0, -1, -1)
+    product_weights: Tuple[int, ...] = (1, 1, 0, -1, -1)
     price_mean: float = -907
     price_std: float = 630
 
@@ -50,7 +50,7 @@ class SpreadPebbles(Spread):
     product_names: Tuple[str, ...] = (
         'PEBBLES_XS', 'PEBBLES_S', 'PEBBLES_M', 'PEBBLES_L', 'PEBBLES_XL'
     )
-    product_weights: Tuple[int] = (1, 1, 1, 1, 1)
+    product_weights: Tuple[int, ...] = (1, 1, 1, 1, 1)
 
 
 @dataclass
@@ -59,7 +59,7 @@ class SpreadRobot(Spread):
     product_names: Tuple[str, ...] = (
         'ROBOT_VACUUMING', 'ROBOT_MOPPING', 'ROBOT_DISHES', 'ROBOT_LAUNDRY', 'ROBOT_IRONING'
     )
-    product_weights: Tuple[int] = (1, 1, 1, 0, 1)
+    product_weights: Tuple[int, ...] = (1, 1, 1, 0, 1)
     price_mean: float = 38801
     price_std: float = 386
 
@@ -71,7 +71,7 @@ class SpreadTranslator(Spread):
         'TRANSLATOR_SPACE_GRAY', 'TRANSLATOR_ASTRO_BLACK', 'TRANSLATOR_ECLIPSE_CHARCOAL',
         'TRANSLATOR_GRAPHITE_MIST', 'TRANSLATOR_VOID_BLUE'
     )
-    product_weights: Tuple[int] = (0, 1, -1, 0, 1)
+    product_weights: Tuple[int, ...] = (0, 1, -1, 0, 1)
     price_mean: float = 10630
     price_std: float = 423
 
@@ -83,7 +83,7 @@ class SpreadOxygen(Spread):
         'OXYGEN_SHAKE_MORNING_BREATH', 'OXYGEN_SHAKE_EVENING_BREATH', 'OXYGEN_SHAKE_MINT',
         'OXYGEN_SHAKE_CHOCOLATE', 'OXYGEN_SHAKE_GARLIC'
     )
-    product_weights: Tuple[int] = (1, 1, 0, -1, 1)
+    product_weights: Tuple[int, ...] = (1, 1, 0, -1, 1)
     price_mean: float = 21705
     price_std: float = 559
 
@@ -94,7 +94,7 @@ class SpreadSnackpack(Spread):
     product_names: Tuple[str, ...] = (
         'SNACKPACK_CHOCOLATE', 'SNACKPACK_VANILLA', 'SNACKPACK_PISTACHIO', 'SNACKPACK_STRAWBERRY', 'SNACKPACK_RASPBERRY'
     )
-    product_weights: Tuple[int] = (0, 0, 0, 0, 1)
+    product_weights: Tuple[int, ...] = (0, 0, 0, 0, 1)
     price_mean: float = 10117
     price_std: float = 186
 
@@ -125,21 +125,26 @@ def get_spread_position(state: TradingState, spr: Spread) -> int:
 
 def get_spread_products_orders(state: TradingState, spr: Spread) -> Tuple[List[int], List[int], List[int], List[int]]:
     order_depths: Dict[str, OrderDepth] = state.order_depths
-
     best_bids, best_asks, best_bid_volumes, best_ask_volumes = [], [], [], []
-    for product in spr.product_names:
-        best_bid = (max(order_depths[product].buy_orders.keys())
-                    if order_depths[product].buy_orders else None)
-        best_ask = (min(order_depths[product].sell_orders.keys())
-                    if order_depths[product].sell_orders else None)
+
+    for product, w in zip(spr.product_names, spr.product_weights):
+        if w == 0:
+            best_bids.append(0)
+            best_asks.append(0)
+            best_bid_volumes.append(0)
+            best_ask_volumes.append(0)
+            continue
+
+        best_bid = max(order_depths[product].buy_orders.keys()) if order_depths[product].buy_orders else None
+        best_ask = min(order_depths[product].sell_orders.keys()) if order_depths[product].sell_orders else None
+
         if not best_bid or not best_ask:
             return [], [], [], []
-        best_bid_volume = order_depths[product].buy_orders.get(best_bid, 0)
-        best_ask_volume = -order_depths[product].sell_orders.get(best_ask, 0)
+
         best_bids.append(best_bid)
         best_asks.append(best_ask)
-        best_bid_volumes.append(best_bid_volume)
-        best_ask_volumes.append(best_ask_volume)
+        best_bid_volumes.append(order_depths[product].buy_orders[best_bid])
+        best_ask_volumes.append(-order_depths[product].sell_orders[best_ask])
 
     return best_bids, best_asks, best_bid_volumes, best_ask_volumes
 
@@ -241,20 +246,24 @@ def trade_mean_reversion(state: TradingState, spr: Spread) -> Dict[str, List[Ord
     if not best_bids or not best_asks:
         return orders
 
-    if position_diff > 0:  # sell spread
-        size = min(position_diff, best_bid_size)
-        for product, w, bid, ask in zip(product_names, spr.product_weights, best_bids, best_asks):
-            if w > 0:
-                orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
-            elif w < 0:
-                orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
-    elif position_diff < 0:  # buy spread
-        size = min(-position_diff, best_ask_size)
-        for product, w, bid, ask in zip(product_names, spr.product_weights, best_bids, best_asks):
-            if w > 0:
-                orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
-            elif w < 0:
-                orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
+    new_target_spread_position = spr.position
+    if position_diff > 0:  # We want to sell spreads
+        new_target_spread_position -= min(position_diff, best_bid_size)
+    elif position_diff < 0:  # We want to buy spreads
+        new_target_spread_position += min(-position_diff, best_ask_size)
+
+    for product, w, bid, ask in zip(product_names, spr.product_weights, best_bids, best_asks):
+        if w == 0:
+            continue
+
+        target_leg_pos = new_target_spread_position * w
+        current_leg_pos = state.position.get(product, 0)
+        leg_order_qty = target_leg_pos - current_leg_pos
+
+        if leg_order_qty < 0:
+            orders[product].append(Order(product, round(bid), int(leg_order_qty)))  # Sell
+        elif leg_order_qty > 0:
+            orders[product].append(Order(product, round(ask), int(leg_order_qty)))  # Buy
 
     return orders
 
@@ -288,22 +297,24 @@ def trade_pebbles(state: TradingState, pbl: SpreadPebbles) -> Dict[str, List[Ord
     if not best_bids or not best_asks:
         return orders
 
-    if position_diff > 0:  # sell spread
-        size = min(position_diff, best_bid_size)
-        if size != 0:
-            for product, w, bid, ask in zip(product_names, pbl.product_weights, best_bids, best_asks):
-                if w > 0:
-                    orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
-                elif w < 0:
-                    orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
-    elif position_diff < 0:  # buy spread
-        size = min(-position_diff, best_ask_size)
-        if size != 0:
-            for product, w, bid, ask in zip(product_names, pbl.product_weights, best_bids, best_asks):
-                if w > 0:
-                    orders[product].append(Order(product, round(ask), abs(size * w)))  # buy product
-                elif w < 0:
-                    orders[product].append(Order(product, round(bid), -abs(size * w)))  # sell product
+    new_target_spread_position = pbl.position
+    if position_diff > 0:  # We want to sell spreads
+        new_target_spread_position -= min(position_diff, best_bid_size)
+    elif position_diff < 0:  # We want to buy spreads
+        new_target_spread_position += min(-position_diff, best_ask_size)
+
+    for product, w, bid, ask in zip(product_names, pbl.product_weights, best_bids, best_asks):
+        if w == 0:
+            continue
+
+        target_leg_pos = new_target_spread_position * w
+        current_leg_pos = state.position.get(product, 0)
+        leg_order_qty = target_leg_pos - current_leg_pos
+
+        if leg_order_qty < 0:
+            orders[product].append(Order(product, round(bid), int(leg_order_qty)))  # Sell
+        elif leg_order_qty > 0:
+            orders[product].append(Order(product, round(ask), int(leg_order_qty)))  # Buy
 
     return orders
 
