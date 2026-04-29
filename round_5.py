@@ -7,105 +7,43 @@ from typing import List, Dict, Tuple
 
 
 @dataclass
-class Product:
+class Spread:
     name: str
-    limit: int
-    fair_value: float = None
-    position: int = 0
-    posted_buy_volume: int = 0
-    posted_sell_volume: int = 0
-    best_bid: float = None
-    best_ask: float = None
-    best_bid_size: int = None
-    best_ask_size: int = None
-    take_thr: int = None
-    default_thr: int = None
-    disregard_thr: int = None
-    join_thr: int = None
-    volume_thr: int = None
-    price_mean: float = None
-    price_std: float = None
-    window_size:  int = None
-    z_score_thr: float = None
+    product_names: Tuple[int]
+    product_weights: Tuple[int]
+    fair_value: float
+    price_mean: float
+    price_std: float
+    window_size: int
+    z_score_thr: float
+
+    def __post_init__(self):
+        self.limit = 10 // np.abs(self.product_weights).max()
 
 
 @dataclass
-class Spread(Product):
-    name: str = 'SPREAD'
-    limit: int = 60
-    product_names: Tuple[str] = ('PICNIC_BASKET1', 'PICNIC_BASKET2', 'CROISSANTS', 'JAMS', 'DJEMBES')
-    product_weights: Tuple[int] = (1, -1, -2, -1, -1)  # Basket1, Basket2, Croissants, Jams, Djembes
-    mean: float = -202.3
-    std: float = 83.9
+class SpreadSleep(Spread):
+    name: str = 'SPREAD_SLEEP'
+    product_names: Tuple[str] = (
+        'SLEEP_POD_SUEDE', 'SLEEP_POD_LAMB_WOOL', 'SLEEP_POD_POLYESTER', 'SLEEP_POD_NYLON', 'SLEEP_POD_COTTON'
+    )
+    product_weights: Tuple[int] = (1, -1, -2, -1, -1)
+    price_mean: float = 0
+    price_std: float = 0
 
 
-CONFIGS = {
-    "GALAXY": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "SLEEP": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "MICROCHIP": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "PEBBLES": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "ROBOT": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "UV": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "TRANSLATOR": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "PANEL": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "OXYGEN": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-
-    "SNACKPACK": dict(limit=10, price_mean=0, price_std=0, z_score_thr=1.9, window_size=10000),
-}
-
-
-def make_product(name: str) -> Product:
-    return Product(name=name, **CONFIGS[name.split("_")[0]])
-
-
-def calc_fair_value(state: TradingState, previous_state: Dict, prod: Product) -> float:
-    previous_price: float | None = previous_state.get(f'{prod.name}_last_price')
-    order_depth: OrderDepth = state.order_depths[prod.name]
-
-    if len(order_depth.sell_orders) != 0 and len(order_depth.buy_orders) != 0:
-        best_ask = min(order_depth.sell_orders.keys())
-        best_bid = max(order_depth.buy_orders.keys())
-
-        fair_value = (best_ask + best_bid) / 2
-
-        if not previous_price:
-            return fair_value
-        else:
-            curr_logr = np.log(fair_value / previous_price)
-
-            if prod.name == "ROBOT_IRONING" or prod.name == "OXYGEN_SHAKE_EVENING_BREATH":
-                mr_param = -0.16
-            elif prod.name == "OXYGEN_SHAKE_CHOCOLATE":
-                mr_param = -0.12
-            else:
-                mr_param = 0
-
-            next_logr = curr_logr * mr_param
-            return fair_value * np.exp(next_logr)
-    else:
-        return previous_price
-
-
-def calc_ema_stats(previous_state: Dict, prod: Product) -> tuple[float, float]:
-    current_price = prod.fair_value
-    ema_mean = prod.price_mean
-    ema_std = prod.price_std
+def calc_ema_stats(previous_state: Dict, spr: Spread) -> tuple[float, float]:
+    current_price = spr.fair_value
+    ema_mean = spr.price_mean
+    ema_std = spr.price_std
 
     if current_price is None:
         return ema_mean, ema_std
 
-    ema_mean = previous_state.get(f'{prod.name}_ema_mean', ema_mean)
-    ema_std = previous_state.get(f'{prod.name}_ema_std', ema_std)
+    ema_mean = previous_state.get(f'{spr.name}_ema_mean', ema_mean)
+    ema_std = previous_state.get(f'{spr.name}_ema_std', ema_std)
 
-    alpha = 2 / (prod.window_size + 1)
+    alpha = 2 / (spr.window_size + 1)
 
     diff = current_price - ema_mean
 
